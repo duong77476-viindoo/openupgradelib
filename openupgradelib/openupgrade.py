@@ -856,6 +856,27 @@ def rename_fields(env, field_spec, no_deep=False):
         # TODO: Rename when the field is part of a submodel (ex. m2one.field)
         if version_info[0] > 9:
             _rename_field_on_custom_view(env, model, old_field, new_field)
+        # mailing_domain of model mailing.mailing can contain fields from other module
+        # For example: lost_reason has changed into lost_reason_id in v16,
+        # and we usually use that field for mailing_domain
+        if table_exists(env.cr, "mailing_mailing"):
+            cr.execute(
+                """
+                UPDATE mailing_mailing mm
+                SET mailing_domain = regexp_replace(
+                    mailing_domain, %(old_pattern)s, %(new_pattern)s, 'g'
+                )
+                FROM ir_model im
+                WHERE mm.mailing_model_id = im.id
+                    AND im.model = %%s
+                    AND mailing_domain ~ %(old_pattern)s
+                """
+                % {
+                    "old_pattern": r"""$$('|")%s('|")$$""" % old_field,
+                    "new_pattern": r"$$\1%s\2$$" % new_field,
+                },
+                (model,),
+            )
 
 
 def rename_tables(cr, table_spec):
