@@ -2744,7 +2744,7 @@ def delete_record_translations(cr, module, xml_ids, field_list=None):
                 FROM information_schema.columns isc
                 JOIN ir_model_fields imf ON (
                     imf.name = isc.column_name AND imf.model = %s)
-                WHERE isc.table_name = %s AND imf.translate""",
+                WHERE isc.table_name = %s AND imf.translate AND isc.data_type = 'jsonb'""",
                 (model, table),
             )
             list_columns = [x[0] for x in cr.fetchall()]
