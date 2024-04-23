@@ -118,6 +118,38 @@ def _get_translation_upgrade_queries(cr, field):
     return migrate_queries, cleanup_queries
 
 
+def migrate_translations_to_jsonb(env, fields_spec):
+    """
+    In Odoo 16, translated fields no longer use the model ir.translation.
+    Instead they store all their values into jsonb columns
+    in the model's table.
+    See https://github.com/odoo/odoo/pull/97692 for more details.
+    Odoo provides a method _get_translation_upgrade_queries returning queries
+    to execute to migrate all the translations of a particular field.
+    The present openupgrade method executes the provided queries
+    on table _ir_translation if exists (when ir_translation table was renamed
+    by Odoo's migration scripts) or on table ir_translation (if module was
+    migrated by OCA).
+    This should be called in a post-migration script of the module
+    that contains the definition of the translatable field.
+    :param fields_spec: list of tuples of (model name, field name)
+    """
+    initial_translation_tables = None
+    if table_exists(env.cr, "_ir_translation"):
+        initial_translation_tables = "_ir_translation"
+    elif table_exists(env.cr, "ir_translation"):
+        initial_translation_tables = "ir_translation"
+    if initial_translation_tables:
+        for model, field_name in fields_spec:
+            field = env[model]._fields[field_name]
+            for query in itertools.chain.from_iterable(
+                _get_translation_upgrade_queries(env.cr, field)
+            ):
+                if initial_translation_tables == "ir_translation":
+                    query = query.replace("_ir_translation", "ir_translation")
+                logged_query(env.cr, query)
+
+
 _BADGE_CONTEXTS = (
     "secondary",
     "primary",
@@ -199,13 +231,13 @@ _BS5_REPLACEMENTS = (
         class_rm="custom-checkbox custom-control",
         class_add="form-check",
     ),
-    _r("custom-control", "form-control"),
-    _r("custom-checkbox", "form-check"),
     _r(
         selector=".custom-control.custom-checkbox",
         class_rm="custom-control custom-checkbox",
         class_add="form-check",
     ),
+    _r("custom-control", "form-control"),
+    _r("custom-checkbox", "form-check"),
     _r("custom-control-input", "form-check-input"),
     _r("custom-control-label", "form-check-label"),
     _r("custom-switch", "form-switch"),
