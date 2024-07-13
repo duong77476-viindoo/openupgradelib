@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OpenUpgrade API &mdash; OpenUpgrade Library 0.1.dev1+gc40e86b documentation</title>
+  <title>OpenUpgrade API &mdash; OpenUpgrade Library 0.1.dev1+g3860cce documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
@@ -15,7 +15,7 @@
   
         <script src="_static/jquery.js?v=5d32c60e"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=64598b87"></script>
+        <script src="_static/documentation_options.js?v=4783cd58"></script>
         <script src="_static/doctools.js?v=9a2dae69"></script>
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -37,7 +37,7 @@
             OpenUpgrade Library
           </a>
               <div class="version">
-                0.1.dev1+gc40e86b
+                0.1.dev1+g3860cce
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -1400,16 +1400,20 @@ storing the old analytic account. By default, it’s analytic_account_id.</p></l
 <dd><p>In Odoo 16, translated fields no longer use the model ir.translation.
 Instead they store all their values into jsonb columns
 in the model’s table.
-See <a class="reference external" href="https://github.com/odoo/odoo/pull/97692">https://github.com/odoo/odoo/pull/97692</a> for more details.
-Odoo provides a method _get_translation_upgrade_queries returning queries
-to execute to migrate all the translations of a particular field.
-The present openupgrade method executes the provided queries
+See <a class="reference external" href="https://github.com/odoo/odoo/pull/97692">https://github.com/odoo/odoo/pull/97692</a> for more details.</p>
+<p>Odoo provides a method _get_translation_upgrade_queries returning queries
+to execute to migrate all the translations of a particular field.</p>
+<p>The present openupgrade method executes the provided queries
 on table _ir_translation if exists (when ir_translation table was renamed
 by Odoo’s migration scripts) or on table ir_translation (if module was
-migrated by OCA).
-This should be called in a post-migration script of the module
-that contains the definition of the translatable field.
-:param fields_spec: list of tuples of (model name, field name)</p>
+migrated by OCA).</p>
+<p>This should be called in a post-migration script of the module
+that contains the definition of the translatable field.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>fields_spec</strong> – list of tuples of (model name, field name)</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
