@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OpenUpgrade API &mdash; OpenUpgrade Library 0.1.dev1+g0bc431f documentation</title>
+  <title>OpenUpgrade API &mdash; OpenUpgrade Library 0.1.dev1+gc40e86b documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
@@ -15,7 +15,7 @@
   
         <script src="_static/jquery.js?v=5d32c60e"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=93a58268"></script>
+        <script src="_static/documentation_options.js?v=64598b87"></script>
         <script src="_static/doctools.js?v=9a2dae69"></script>
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -37,7 +37,7 @@
             OpenUpgrade Library
           </a>
               <div class="version">
-                0.1.dev1+g0bc431f
+                0.1.dev1+gc40e86b
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -520,7 +520,7 @@ Useful from v14 onwards.
 
 <dl class="py function">
 <dt class="sig sig-object py" id="openupgradelib.openupgrade.disable_invalid_filters">
-<span class="sig-prename descclassname"><span class="pre">openupgradelib.openupgrade.</span></span><span class="sig-name descname"><span class="pre">disable_invalid_filters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#openupgradelib.openupgrade.disable_invalid_filters" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">openupgradelib.openupgrade.</span></span><span class="sig-name descname"><span class="pre">disable_invalid_filters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#openupgradelib.openupgrade.disable_invalid_filters" title="Link to this definition"></a></dt>
 <dd><p>It analyzes all the existing active filters to check if they are still
 correct. If not, they are disabled for avoiding errors when clicking on
 them, or worse, if they are default filters when opening the model/action.</p>
@@ -592,7 +592,7 @@ If everything went right, the constraints will be recreated</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="openupgradelib.openupgrade.load_data">
-<span class="sig-prename descclassname"><span class="pre">openupgradelib.openupgrade.</span></span><span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idref</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'init'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#openupgradelib.openupgrade.load_data" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">openupgradelib.openupgrade.</span></span><span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env_or_cr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idref</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'init'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#openupgradelib.openupgrade.load_data" title="Link to this definition"></a></dt>
 <dd><p>Load an xml, csv or yml data file from your post script. The usual case for
 this is the
 occurrence of newly added essential or useful data in the module that is
@@ -606,6 +606,7 @@ in your migrations directory and load that file.
 Leave it to the user to actually delete existing resources that are
 marked with ‘noupdate’ (other named items will be deleted
 automatically).</p>
+<p>Notes: Argument “env_or_cr” is an cr until 16 and is an env is required since 17.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

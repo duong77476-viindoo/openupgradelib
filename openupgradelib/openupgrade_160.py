@@ -4,16 +4,22 @@
 """This module provides simple tools for OpenUpgrade migration, specific for
 the >=16.0 migration.
 """
-import itertools
 import logging
 from itertools import product
 
 from psycopg2 import sql
 from psycopg2.extras import Json
 
-import odoo
+from odoo import tools
+from odoo.osv import expression
+from odoo.tools.translate import _get_translation_upgrade_queries
 
-from .openupgrade import logged_query, table_exists, update_field_multilang
+from .openupgrade import (
+    get_model2table,
+    logged_query,
+    table_exists,
+    update_field_multilang,
+)
 from .openupgrade_tools import (
     convert_html_fragment,
     convert_html_replacement_class_shortcut as _r,
@@ -25,129 +31,58 @@ logger = logging.getLogger("OpenUpgrade")
 logger.setLevel(logging.DEBUG)
 
 
-def _get_translation_upgrade_queries(cr, field):
-    """Return a pair of lists ``migrate_queries, cleanup_queries``
-    of SQL queries. The queries in
-    ``migrate_queries`` do migrate the data from table ``_ir_translation`` to the corresponding
-    field's column, while the queries in ``cleanup_queries`` remove the corresponding data from
-    table ``_ir_translation``.
-    """
-    Model = odoo.registry(cr.dbname)[field.model_name]
-    translation_name = f"{field.model_name},{field.name}"
-    migrate_queries = []
-    cleanup_queries = []
-
-    if field.translate is True:
-        query = f"""
-            WITH t AS (
-                SELECT it.res_id as res_id, jsonb_object_agg(it.lang, it.value)
-                AS value, bool_or(imd.noupdate) AS noupdate
-                  FROM ir_translation it
-             LEFT JOIN ir_model_data imd
-                    ON imd.model = %s AND imd.res_id = it.res_id
-                 WHERE it.type = 'model' AND it.name = %s AND it.state = 'translated'
-              GROUP BY it.res_id
-            )
-            UPDATE {Model._table} m
-               SET "{field.name}" = CASE
-               WHEN t.noupdate
-               THEN m."{field.name}" || t.value ELSE t.value || m."{field.name}" END
-            FROM t
-            WHERE t.res_id = m.id
-        """
-        migrate_queries.append(
-            cr.mogrify(query, [Model._name, translation_name]).decode()
-        )
-
-        query = "DELETE FROM ir_translation WHERE type = 'model' AND name = %s"
-        cleanup_queries.append(cr.mogrify(query, [translation_name]).decode())
-
-    # upgrade model_terms translation: one update per field per record
-    if callable(field.translate):
-        cr.execute(
-            f"""
-            WITH t0 AS (
-                -- aggregate translations by source term --
-                SELECT res_id, lang, jsonb_object_agg(src, value) AS value
-                  FROM ir_translation
-                 WHERE type = 'model_terms' AND name = %s AND state = 'translated'
-              GROUP BY res_id, lang
-            ),
-            t AS (
-                -- aggregate translations by lang --
-                SELECT t0.res_id AS res_id,
-                jsonb_object_agg(t0.lang, t0.value) AS value,
-                bool_or(imd.noupdate) AS noupdate
-                  FROM t0
-             LEFT JOIN ir_model_data imd
-                    ON imd.model = %s AND imd.res_id = t0.res_id
-              GROUP BY t0.res_id
-            )
-            SELECT t.res_id, m."{field.name}", t.value, t.noupdate
-              FROM t
-              JOIN "{Model._table}" m ON t.res_id = m.id
-        """,
-            [translation_name, Model._name],
-        )
-        for id_, new_translations, translations, noupdate in cr.fetchall():
-            if not new_translations:
-                continue
-            # new_translations contains translations updated from the latest po files
-            src_value = new_translations.pop("en_US")
-            src_terms = field.get_trans_terms(src_value)
-            for lang, dst_value in new_translations.items():
-                terms_mapping = translations.setdefault(lang, {})
-                dst_terms = field.get_trans_terms(dst_value)
-                for src_term, dst_term in zip(src_terms, dst_terms):
-                    if src_term == dst_term or noupdate:
-                        terms_mapping.setdefault(src_term, dst_term)
-                    else:
-                        terms_mapping[src_term] = dst_term
-            new_values = {
-                lang: field.translate(terms_mapping.get, src_value)
-                for lang, terms_mapping in translations.items()
-            }
-            if "en_US" not in new_values:
-                new_values["en_US"] = field.translate(lambda v: None, src_value)
-            query = f'UPDATE "{Model._table}" SET "{field.name}" = %s WHERE id = %s'
-            migrate_queries.append(cr.mogrify(query, [Json(new_values), id_]).decode())
-
-        query = "DELETE FROM ir_translation WHERE type = 'model_terms' AND name = %s"
-        cleanup_queries.append(cr.mogrify(query, [translation_name]).decode())
-
-    return migrate_queries, cleanup_queries
-
-
 def migrate_translations_to_jsonb(env, fields_spec):
     """
     In Odoo 16, translated fields no longer use the model ir.translation.
     Instead they store all their values into jsonb columns
     in the model's table.
     See https://github.com/odoo/odoo/pull/97692 for more details.
+
     Odoo provides a method _get_translation_upgrade_queries returning queries
     to execute to migrate all the translations of a particular field.
+
     The present openupgrade method executes the provided queries
     on table _ir_translation if exists (when ir_translation table was renamed
     by Odoo's migration scripts) or on table ir_translation (if module was
     migrated by OCA).
+
     This should be called in a post-migration script of the module
     that contains the definition of the translatable field.
+
     :param fields_spec: list of tuples of (model name, field name)
     """
-    initial_translation_tables = None
+    # Odoo's core method expects to have the former `ir_tanslation` table renamed. If
+    # we don't, it's going to fail as it tries to execute queries on it
+    rename_translation_table = table_exists(env.cr, "ir_translation")
+    if rename_translation_table:
+        logged_query(env.cr, "ALTER TABLE ir_translation RENAME TO _ir_translation")
     if table_exists(env.cr, "_ir_translation"):
-        initial_translation_tables = "_ir_translation"
-    elif table_exists(env.cr, "ir_translation"):
-        initial_translation_tables = "ir_translation"
-    if initial_translation_tables:
         for model, field_name in fields_spec:
+            table = get_model2table(model)
+            if not table_exists(env.cr, table):
+                logger.warning(
+                    "Couldn't find table for model %s - not updating translations",
+                    model,
+                )
+                continue
+            # Convert columns if needed
+            columns = tools.sql.table_columns(env.cr, table)
+            if columns.get(field_name, {}).get("udt_name", "") in ["varchar", "text"]:
+                tools.sql.convert_column_translatable(
+                    env.cr, table, field_name, "jsonb"
+                )
             field = env[model]._fields[field_name]
-            for query in itertools.chain.from_iterable(
-                _get_translation_upgrade_queries(env.cr, field)
-            ):
-                if initial_translation_tables == "ir_translation":
-                    query = query.replace("_ir_translation", "ir_translation")
+            # Ignore cleanup queries as we want to keep the original ir_translation
+            # table records in order to be able to fix possible inconsistencies once
+            # we're migrated.
+            migrate_queries, _cleanup_queries = _get_translation_upgrade_queries(
+                env.cr, field
+            )
+            for query in migrate_queries:
                 logged_query(env.cr, query)
+    # Just leave it as it was if we renamed it
+    if rename_translation_table:
+        logged_query(env.cr, "ALTER TABLE _ir_translation RENAME TO ir_translation")
 
 
 _BADGE_CONTEXTS = (
@@ -443,10 +378,9 @@ def convert_field_bootstrap_4to5(
             field_name,
             domain,
         )
-    records = env[model_name].search(domain or [])
     return _convert_field_bootstrap_4to5_sql(
         env.cr,
-        records._table,
+        env[model_name]._table,
         field_name,
     )
 
@@ -459,7 +393,8 @@ def _convert_field_bootstrap_4to5_orm(env, model_name, field_name, domain=None):
     :param str field_name: Field to convert in that model.
     :param domain list: Domain to restrict conversion.
     """
-    domain = domain or [(field_name, "!=", False), (field_name, "!=", "<p><br></p>")]
+    # No class attribute will imply that no bootstrap conversion is needed at all
+    domain = expression.AND([domain or [], [(field_name, "ilike", "class=")]])
     records = env[model_name].search(domain)
     update_field_multilang(
         records,
