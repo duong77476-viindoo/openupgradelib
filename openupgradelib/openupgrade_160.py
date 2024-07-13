@@ -4,7 +4,6 @@
 """This module provides simple tools for OpenUpgrade migration, specific for
 the >=16.0 migration.
 """
-import itertools
 import logging
 from itertools import product
 
@@ -12,8 +11,16 @@ from psycopg2 import sql
 from psycopg2.extras import Json
 
 import odoo
+from odoo import tools
+from odoo.osv import expression
+from odoo.tools.translate import _get_translation_upgrade_queries
 
-from .openupgrade import logged_query, table_exists, update_field_multilang
+from .openupgrade import (
+    get_model2table,
+    logged_query,
+    table_exists,
+    update_field_multilang,
+)
 from .openupgrade_tools import (
     convert_html_fragment,
     convert_html_replacement_class_shortcut as _r,
@@ -134,20 +141,38 @@ def migrate_translations_to_jsonb(env, fields_spec):
     that contains the definition of the translatable field.
     :param fields_spec: list of tuples of (model name, field name)
     """
-    initial_translation_tables = None
+    # Odoo's core method expects to have the former `ir_tanslation` table renamed. If
+    # we don't, it's going to fail as it tries to execute queries on it
+    rename_translation_table = table_exists(env.cr, "ir_translation")
+    if rename_translation_table:
+        logged_query(env.cr, "ALTER TABLE ir_translation RENAME TO _ir_translation")
     if table_exists(env.cr, "_ir_translation"):
-        initial_translation_tables = "_ir_translation"
-    elif table_exists(env.cr, "ir_translation"):
-        initial_translation_tables = "ir_translation"
-    if initial_translation_tables:
         for model, field_name in fields_spec:
+            table = get_model2table(model)
+            if not table_exists(env.cr, table):
+                logger.warning(
+                    "Couldn't find table for model %s - not updating translations",
+                    model,
+                )
+                continue
+            # Convert columns if needed
+            columns = tools.sql.table_columns(env.cr, table)
+            if columns.get(field_name, {}).get("udt_name", "") in ["varchar", "text"]:
+                tools.sql.convert_column_translatable(
+                    env.cr, table, field_name, "jsonb"
+                )
             field = env[model]._fields[field_name]
-            for query in itertools.chain.from_iterable(
-                _get_translation_upgrade_queries(env.cr, field)
-            ):
-                if initial_translation_tables == "ir_translation":
-                    query = query.replace("_ir_translation", "ir_translation")
+            # Ignore cleanup queries as we want to keep the original ir_translation
+            # table records in order to be able to fix possible inconsistencies once
+            # we're migrated.
+            migrate_queries, _cleanup_queries = _get_translation_upgrade_queries(
+                env.cr, field
+            )
+            for query in migrate_queries:
                 logged_query(env.cr, query)
+    # Just leave it as it was if we renamed it
+    if rename_translation_table:
+        logged_query(env.cr, "ALTER TABLE _ir_translation RENAME TO ir_translation")
 
 
 _BADGE_CONTEXTS = (
@@ -443,10 +468,9 @@ def convert_field_bootstrap_4to5(
             field_name,
             domain,
         )
-    records = env[model_name].search(domain or [])
     return _convert_field_bootstrap_4to5_sql(
         env.cr,
-        records._table,
+        env[model_name]._table,
         field_name,
     )
 
@@ -459,7 +483,8 @@ def _convert_field_bootstrap_4to5_orm(env, model_name, field_name, domain=None):
     :param str field_name: Field to convert in that model.
     :param domain list: Domain to restrict conversion.
     """
-    domain = domain or [(field_name, "!=", False), (field_name, "!=", "<p><br></p>")]
+    # No class attribute will imply that no bootstrap conversion is needed at all
+    domain = expression.AND([domain or [], [(field_name, "ilike", "class=")]])
     records = env[model_name].search(domain)
     update_field_multilang(
         records,
